@@ -153,7 +153,7 @@ void get_path_commands(std::vector<std::string> &tokens, std::vector<Command> &c
 {
      std::string lookup = "cCmMlLvVhHzZ";
      unsigned int size = tokens.size();
-
+    
 /*
      int i =0; 
      for(std::string token: tokens)
@@ -176,23 +176,37 @@ void get_path_commands(std::vector<std::string> &tokens, std::vector<Command> &c
          split(token, ',', numberStrs);
          for(std::string numberStr : numberStrs)
          {
-           std::cout << "    " << lastCmd  << " "  << numberStr << std::endl;
+           std::cout << "    " << lastCmd  << " NB STR"  << numberStr << std::endl;
            double f = atof(numberStr.c_str());
            numbers.push_back(f);
          }
        }
        else
        {
+
+std::cout << " [[[[[#$%435\n";
          if(lastCmd != 'x')
          {
-           Command cmd;
-           cmd.type = lastCmd;
-           if (lastCmd == 'c')
+           if (lastCmd == 'c' || lastCmd == 'C')
            {
-              unsigned int i =0; 
+std::cout << "#$%435\n";
+              unsigned int i = 0;
+	      size_t size = numbers.size();
+	      while( i < size)
+	      {
+                Command cmd;
+                cmd.type = lastCmd;
+		cmd.data[0] = numbers[i];
+		cmd.data[1] = numbers[i+1];
+		cmd.data[2] = numbers[i+2];
+		cmd.data[3] = numbers[i+3];
+		cmd.data[4] = numbers[i+4];
+		cmd.data[5] = numbers[i+5];
+                cmds.push_back(cmd);
+                i += 6;
+	      } 
            }
 //           else if ()
-           cmds.push_back(cmd);
          }
          // its new command
          lastCmd = token[0];
@@ -200,6 +214,7 @@ void get_path_commands(std::vector<std::string> &tokens, std::vector<Command> &c
          std::cout << "  CMD:" << lastCmd << std::endl;
        }
      }
+     
 }
 
 void get_path_attribs(TiXmlElement* pElement, Path &path)
@@ -290,7 +305,11 @@ void dump_to_stdout(const char* pFilename)
       std::cout << "PATHS: " << std::endl;
       for (Path path : paths)
       {
-        std::cout << " -" << path.id << std::endl;
+        std::cout << " -" << path.id << " " << path.style << std::endl;
+        for (Command cmd: path.cmds)
+	{
+	  std::cout << "    " << cmd.type << std::endl;
+	}
      }
   }
 }
