@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <exception>
 #include <sstream>
 #include <string>
 #include <algorithm>
@@ -6,107 +7,83 @@
 #include <iostream>
 #include "tinyxml.h"
 
-// ----------------------------------------------------------------------
-// STDOUT dump and indenting utility functions
-// ----------------------------------------------------------------------
-const unsigned int NUM_INDENTS_PER_SPACE=2;
+class SvgError: public std::runtime_error
+{ public: SvgError(const std::string& what_arg): std::runtime_error(what_arg){};};
 
-const char * getIndent( unsigned int numIndents )
+
+
+struct Point
 {
-    static const char * pINDENT="                                      + ";
-    static const unsigned int LENGTH=strlen( pINDENT );
-    unsigned int n=numIndents*NUM_INDENTS_PER_SPACE;
-    if ( n > LENGTH ) n = LENGTH;
+    double x;
+    double y;
+};
 
-    return &pINDENT[ LENGTH-n ];
-}
-
-// same as getIndent but no "+" at the end
-const char * getIndentAlt( unsigned int numIndents )
+struct Command
 {
-    static const char * pINDENT="                                        ";
-    static const unsigned int LENGTH=strlen( pINDENT );
-    unsigned int n=numIndents*NUM_INDENTS_PER_SPACE;
-    if ( n > LENGTH ) n = LENGTH;
+   char type;
+   std::vector<double> numbers;
+/*
+   double data[6]; // not all used
+   Command()
+   {
+     data[0] = 0;
+     data[1] = 0;
+     data[2] = 0;
+     data[3] = 0;
+     data[4] = 0;
+     data[5] = 0;
+   }
+*/
+   
+   std::string tostr() 
+   {
+     std::ostringstream os;
+     os << type << "[";
+     for (double d : numbers)
+     {
+       os << d << ", ";
+     }
+     os << "]";
+/*
+     os << data[0] << ", ";
+     os << data[1] << ", ";
+     os << data[2] << ", ";
+     os << data[3] << ", ";
+     os << data[4] << ", ";
+     os << data[5] << "]";
+*/
+     return os.str();
+   }   
+};
 
-    return &pINDENT[ LENGTH-n ];
-}
-
-int dump_attribs_to_stdout(TiXmlElement* pElement, unsigned int indent)
+struct Path
 {
-    if ( !pElement ) return 0;
+//   std::vector<Command> cmds;
+   std::string id;
+   std::string style;
 
-    TiXmlAttribute* pAttrib=pElement->FirstAttribute();
-    int i=0;
-    int ival;
-    double dval;
-    const char* pIndent=getIndent(indent);
-    printf("\n");
-    while (pAttrib)
-    {
-        printf( "%s%s: value=[%s]", pIndent, pAttrib->Name(), pAttrib->Value());
+    std::vector< std::vector<Command> > subPaths;   
+};
 
-        if (pAttrib->QueryIntValue(&ival)==TIXML_SUCCESS)    printf( " int=%d", ival);
-        if (pAttrib->QueryDoubleValue(&dval)==TIXML_SUCCESS) printf( " d=%1.1f", dval);
-        printf( "\n" );
-        i++;
-        pAttrib=pAttrib->Next();
-    }
-    return i;   
-}
 
-void dump_to_stdout( TiXmlNode* pParent, unsigned int indent = 0 )
+
+class SvgReader
 {
-    if ( !pParent ) return;
 
-    TiXmlNode* pChild;
-    TiXmlText* pText;
-    int t = pParent->Type();
-    printf( "%s", getIndent(indent));
-    int num;
+  public: SvgReader(){}
 
-    switch ( t )
-    {
-    case TiXmlNode::TINYXML_DOCUMENT:
-        printf( "Document" );
-        break;
+  public: void Parse(const char*path, std::vector<Path> &paths);
+  public: void Dump_paths(const std::vector<Path> paths ) const;
 
-    case TiXmlNode::TINYXML_ELEMENT:
-        printf( "Element [%s]", pParent->Value() );
-        num=dump_attribs_to_stdout(pParent->ToElement(), indent+1);
-        switch(num)
-        {
-            case 0:  printf( " (No attributes)"); break;
-            case 1:  printf( "%s1 attribute", getIndentAlt(indent)); break;
-            default: printf( "%s%d attributes", getIndentAlt(indent), num); break;
-        }
-        break;
+  private: void make_commands(char cmd, const std::vector<double> &numbers, std::vector<Command> &cmds);
+  private: void get_path_commands(const std::vector<std::string> &tokens, Path &path);
+  private: void get_path_attribs(TiXmlElement* pElement, Path &path);
+  private: void get_svg_paths(TiXmlNode* pParent, std::vector<Path> &paths);
 
-    case TiXmlNode::TINYXML_COMMENT:
-        printf( "Comment: [%s]", pParent->Value());
-        break;
+  private: void SplitCommands(const std::vector<Command> cmds, double resolution, std::vector< std::vector<Command> > &split_cmds);
+  private: void PathToPoints(const Path &path, double resolution, std::vector< std::vector<Point> > &polys);
 
-    case TiXmlNode::TINYXML_UNKNOWN:
-        printf( "Unknown" );
-        break;
-
-    case TiXmlNode::TINYXML_TEXT:
-        pText = pParent->ToText();
-        printf( "Text: [%s]", pText->Value() );
-        break;
-
-    case TiXmlNode::TINYXML_DECLARATION:
-        printf( "Declaration" );
-        break;
-    default:
-        break;
-    }
-    printf( "\n" );
-    for ( pChild = pParent->FirstChild(); pChild != 0; pChild = pChild->NextSibling()) 
-    {
-        dump_to_stdout( pChild, indent+1 );
-    }
-}
+};
 
 
 std::string lowercase(const std::string& in)
@@ -116,26 +93,12 @@ std::string lowercase(const std::string& in)
   return out;
 }
 
+
 std::string lowercase(const char* in)
 {
   std::string ins = in;
   return lowercase(ins);
 }
-
-
-struct Command
-{
-   char type;
-   double data[6]; // not all used
-};
-
-struct Path
-{
-   std::vector<Command> cmds;
-   std::string id;
-   std::string style;
-};
-
 
 
 std::vector<std::string> &split(const std::string &s, char delim, std::vector<std::string> &elems) {
@@ -147,21 +110,105 @@ std::vector<std::string> &split(const std::string &s, char delim, std::vector<st
     return elems;
 }
 
-
-
-void get_path_commands(std::vector<std::string> &tokens, std::vector<Command> &cmds)
+void SvgReader::SplitCommands(const std::vector<Command> cmds, double resolution, std::vector< std::vector<Command> > &split_cmds)
 {
-     std::string lookup = "cCmMlLvVhHzZ";
-     unsigned int size = tokens.size();
-    
+  for(Command cmd: cmds)
+  {
+    if( tolower(cmd.type) == 'm')
+    {
+        
+    }
+  }
+  
+}
+
+void SvgReader::make_commands(char cmd, const std::vector<double> &numbers, std::vector<Command> &cmds)
+{
+  if(cmd != 'x')
+  { 
+    Command c;
+    c.type = cmd;
+    c.numbers = numbers;
+    cmds.push_back(c);
+  }
+
 /*
-     int i =0; 
-     for(std::string token: tokens)
-     {
-        std::cout << i << "/ " << size <<  "] " << token << std::endl;
-        i++;     
-     }
-*/
+  if (tolower(cmd) == 'c')
+  {
+    unsigned int i = 0;
+	size_t size = numbers.size();
+	while( i < size)
+	{
+      Command c;
+      c.type = cmd;
+      
+	  c.data[0] = numbers[i+0];
+	  c.data[1] = numbers[i+1];
+	  c.data[2] = numbers[i+2];
+	  c.data[3] = numbers[i+3];
+	  c.data[4] = numbers[i+4];
+	  c.data[5] = numbers[i+5];
+      cmds.push_back(c);
+      i += 6;
+	}
+    return; 
+  }
+
+  if (tolower(cmd) == 'm' || tolower(cmd) == 'l')
+  {
+    unsigned int i = 0;
+    size_t size = numbers.size();
+    std::cout << "MCOMMAND " << size << std::endl;
+    while (i < size)
+    {
+      Command c;
+      c.type = cmd;
+      size_t size =  numbers.size();
+      c.data[0] = numbers[i+0];
+      c.data[1] = numbers[i+1];
+      cmds.push_back(c);
+      i += 2;
+    }
+    return;
+  }
+
+  if (tolower(cmd) == 'v' || tolower(cmd) == 'h')
+  {
+    unsigned int i = 0;
+    size_t size = numbers.size();
+    while (i < size)
+    {
+      Command c;
+      c.type = cmd;
+      c.data[0] = numbers[0];
+      c.data[1] = numbers[1];
+      cmds.push_back(c);
+      i += 1;
+    }
+    return;
+  }
+
+  if (tolower(cmd) == 'z')
+  {
+    Command c;
+    c.type = cmd;
+    cmds.push_back(c);
+    return;
+  }
+
+  std::string s = "Unknown cmd " + cmd;
+  SvgError x(s.c_str());
+  throw(x);
+ */
+
+}
+
+
+void SvgReader::get_path_commands(const std::vector<std::string> &tokens, Path &path)
+{
+     std::vector <Command> cmds;
+     
+     std::string lookup = "cCmMlLvVhHzZ";
      char lastCmd = 'x';
      std::vector<double> numbers;
      
@@ -176,48 +223,39 @@ void get_path_commands(std::vector<std::string> &tokens, std::vector<Command> &c
          split(token, ',', numberStrs);
          for(std::string numberStr : numberStrs)
          {
-           std::cout << "    " << lastCmd  << " NB STR"  << numberStr << std::endl;
            double f = atof(numberStr.c_str());
            numbers.push_back(f);
          }
        }
        else
        {
-
-std::cout << " [[[[[#$%435\n";
+         
          if(lastCmd != 'x')
-         {
-           if (lastCmd == 'c' || lastCmd == 'C')
-           {
-std::cout << "#$%435\n";
-              unsigned int i = 0;
-	      size_t size = numbers.size();
-	      while( i < size)
-	      {
-                Command cmd;
-                cmd.type = lastCmd;
-		cmd.data[0] = numbers[i];
-		cmd.data[1] = numbers[i+1];
-		cmd.data[2] = numbers[i+2];
-		cmd.data[3] = numbers[i+3];
-		cmd.data[4] = numbers[i+4];
-		cmd.data[5] = numbers[i+5];
-                cmds.push_back(cmd);
-                i += 6;
-	      } 
-           }
-//           else if ()
+         { 
+           Command c;
+           c.type = lastCmd;
+           c.numbers = numbers;
+           cmds.push_back(c);
          }
+
          // its new command
          lastCmd = token[0];
          numbers.resize(0);
-         std::cout << "  CMD:" << lastCmd << std::endl;
        }
      }
-     
+     // the last command
+     if(lastCmd != 'x')
+     { 
+       Command c;
+       c.type = lastCmd;
+       c.numbers = numbers;
+       cmds.push_back(c);
+     }
+    // split the commands into sub_paths
+    
 }
 
-void get_path_attribs(TiXmlElement* pElement, Path &path)
+void SvgReader::get_path_attribs(TiXmlElement* pElement, Path &path)
 {
     if ( !pElement ) return;
 
@@ -240,7 +278,7 @@ void get_path_attribs(TiXmlElement* pElement, Path &path)
             // this attribute contains a list of coordinates
             std::vector<std::string> tokens;
             split(value, ' ', tokens);
-            get_path_commands(tokens, path.cmds);
+            get_path_commands(tokens, path);
             
         }
         // int ival;
@@ -252,7 +290,7 @@ void get_path_attribs(TiXmlElement* pElement, Path &path)
 }
 
 
-void get_svg_paths(TiXmlNode* pParent, std::vector<Path> &paths)
+void SvgReader::get_svg_paths(TiXmlNode* pParent, std::vector<Path> &paths)
 {
     if ( !pParent ) return;
 
@@ -284,34 +322,38 @@ void get_svg_paths(TiXmlNode* pParent, std::vector<Path> &paths)
 }
 
 // load the named file and dump its structure to STDOUT
-void dump_to_stdout(const char* pFilename)
+void SvgReader::Parse(const char* pFilename, std::vector<Path> &paths)
 {
     TiXmlDocument doc(pFilename);
     bool loadOkay = doc.LoadFile();
     if (!loadOkay)
     {
-        printf("Failed to load file \"%s\"\n", pFilename);
+      std::ostringstream os;
+      os << "Failed to load file " <<  pFilename;
+      SvgError x(os.str());
+      throw x;
     }
-    else
+
+  get_svg_paths( &doc, paths);
+
+}
+
+void SvgReader::Dump_paths(const std::vector<Path> paths ) const
+{
+  std::cout << "PATHS: " << std::endl;
+  for (Path path : paths)
+  {
+    std::cout << " -" << path.id << " " << path.style << std::endl;
+    for (std::vector<Command> subPath : path.subPaths)
     {
-      printf("\n%s:\n", pFilename);
-//      dump_to_stdout( &doc ); // defined later in the tutorial
-      std::vector<Path> paths;
+      std::cout << "   subpath (" << subPath.size() << " cmds)" << std::endl;
+      for (Command cmd: subPath)
+  	  {
+	    std::cout << "    " << cmd.tostr() << std::endl;
+	  }
+   }
+ }
 
-      std::cout << "\n\n\n****\n\n\n*****\n\n\n****" << std::endl;
-
-      get_svg_paths( &doc, paths);
-
-      std::cout << "PATHS: " << std::endl;
-      for (Path path : paths)
-      {
-        std::cout << " -" << path.id << " " << path.style << std::endl;
-        for (Command cmd: path.cmds)
-	{
-	  std::cout << "    " << cmd.type << std::endl;
-	}
-     }
-  }
 }
 
 // ----------------------------------------------------------------------
@@ -319,10 +361,18 @@ void dump_to_stdout(const char* pFilename)
 // ----------------------------------------------------------------------
 int main(int argc, char* argv[])
 {
+    std::vector<Path> paths;
+
     for (int i=1; i<argc; i++)
     {
-        dump_to_stdout(argv[i]);
+      std::cout << "=========\nFILE: " << argv[i] << std::endl;
+      std::vector<Path> paths;
+
+      SvgReader svg;
+      svg.Parse(argv[i], paths);
+      svg.Dump_paths(paths);     
     }
+
     return 0;
 }
 
