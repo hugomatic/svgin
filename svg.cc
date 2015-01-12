@@ -22,19 +22,7 @@ struct Command
 {
    char type;
    std::vector<double> numbers;
-/*
-   double data[6]; // not all used
-   Command()
-   {
-     data[0] = 0;
-     data[1] = 0;
-     data[2] = 0;
-     data[3] = 0;
-     data[4] = 0;
-     data[5] = 0;
-   }
-*/
-   
+  
    std::string tostr() 
    {
      std::ostringstream os;
@@ -44,14 +32,6 @@ struct Command
        os << d << ", ";
      }
      os << "]";
-/*
-     os << data[0] << ", ";
-     os << data[1] << ", ";
-     os << data[2] << ", ";
-     os << data[3] << ", ";
-     os << data[4] << ", ";
-     os << data[5] << "]";
-*/
      return os.str();
    }   
 };
@@ -62,7 +42,7 @@ struct Path
    std::string id;
    std::string style;
 
-    std::vector< std::vector<Command> > subPaths;   
+   std::vector< std::vector<Command> > subpaths;   
 };
 
 
@@ -80,7 +60,8 @@ class SvgReader
   private: void get_path_attribs(TiXmlElement* pElement, Path &path);
   private: void get_svg_paths(TiXmlNode* pParent, std::vector<Path> &paths);
 
-  private: void SplitCommands(const std::vector<Command> cmds, double resolution, std::vector< std::vector<Command> > &split_cmds);
+  private: void ExpandCommands(const std::vector< std::vector<Command> > &subpaths, Path &path);
+  private: void SplitSubpaths(const std::vector<Command> cmds, std::vector< std::vector<Command> > &split_cmds);
   private: void PathToPoints(const Path &path, double resolution, std::vector< std::vector<Point> > &polys);
 
 };
@@ -110,16 +91,30 @@ std::vector<std::string> &split(const std::string &s, char delim, std::vector<st
     return elems;
 }
 
-void SvgReader::SplitCommands(const std::vector<Command> cmds, double resolution, std::vector< std::vector<Command> > &split_cmds)
+
+void SvgReader::SplitSubpaths(const std::vector<Command> cmds, std::vector< std::vector<Command> > &subpaths)
 {
+  if(cmds.size() ==0)
+  {
+    std::ostringstream os;
+    os << "Path has no commands";
+    SvgError x(os.str());
+    throw x;
+  }
+  
   for(Command cmd: cmds)
   {
     if( tolower(cmd.type) == 'm')
     {
-        
+      // the path contains a subpath
+      std::vector<Command> sub;
+      subpaths.push_back(sub);
     }
-  }
-  
+    // get a reference to the latest subpath
+    std::vector<Command> &subpath = subpaths.back();
+    // give the cmd to the latest
+    subpath.push_back(cmd);
+  }  
 }
 
 void SvgReader::make_commands(char cmd, const std::vector<double> &numbers, std::vector<Command> &cmds)
@@ -133,45 +128,6 @@ void SvgReader::make_commands(char cmd, const std::vector<double> &numbers, std:
   }
 
 /*
-  if (tolower(cmd) == 'c')
-  {
-    unsigned int i = 0;
-	size_t size = numbers.size();
-	while( i < size)
-	{
-      Command c;
-      c.type = cmd;
-      
-	  c.data[0] = numbers[i+0];
-	  c.data[1] = numbers[i+1];
-	  c.data[2] = numbers[i+2];
-	  c.data[3] = numbers[i+3];
-	  c.data[4] = numbers[i+4];
-	  c.data[5] = numbers[i+5];
-      cmds.push_back(c);
-      i += 6;
-	}
-    return; 
-  }
-
-  if (tolower(cmd) == 'm' || tolower(cmd) == 'l')
-  {
-    unsigned int i = 0;
-    size_t size = numbers.size();
-    std::cout << "MCOMMAND " << size << std::endl;
-    while (i < size)
-    {
-      Command c;
-      c.type = cmd;
-      size_t size =  numbers.size();
-      c.data[0] = numbers[i+0];
-      c.data[1] = numbers[i+1];
-      cmds.push_back(c);
-      i += 2;
-    }
-    return;
-  }
-
   if (tolower(cmd) == 'v' || tolower(cmd) == 'h')
   {
     unsigned int i = 0;
@@ -203,6 +159,53 @@ void SvgReader::make_commands(char cmd, const std::vector<double> &numbers, std:
 
 }
 
+void SvgReader::ExpandCommands(const std::vector< std::vector<Command> > &subpaths,  Path &path)
+{
+  for (std::vector<Command> compressedSubpath :subpaths)
+  {
+    // add new subpath
+    path.subpaths.push_back( std::vector<Command>());
+    // get a reference	
+    std::vector<Command> &subpath = path.subpaths.back();
+    // copy the cmds with repeating commands, grouping the numbers
+    for (Command xCmd : compressedSubpath)
+    {
+      unsigned int numberCount = 0;      
+      if (tolower(xCmd.type) == 'c') 
+	numberCount = 6;
+      if (tolower(xCmd.type) == 'm')
+	numberCount = 2;
+      if (tolower(xCmd.type) == 'l')
+	numberCount = 2;
+      if (tolower(xCmd.type) == 'v')
+	numberCount = 1;
+      if (tolower(xCmd.type) == 'h')
+	numberCount = 1;
+      if (tolower(xCmd.type) == 'z')
+      {
+        subpath.push_back(xCmd);
+      }	
+      
+      // group numbers together and repeat the command
+      // for each group
+      unsigned int n = 0;
+      size_t size = xCmd.numbers.size();
+
+      while(n < size)
+      {
+        subpath.push_back(Command());
+        Command &cmd = subpath.back();
+        cmd.type = xCmd.type;
+	
+	for(size_t i=0; i < numberCount; i++)
+	{
+	   cmd.numbers.push_back(xCmd.numbers[i+n]);
+	}
+        n += numberCount;
+      } 
+    }
+  }
+}
 
 void SvgReader::get_path_commands(const std::vector<std::string> &tokens, Path &path)
 {
@@ -251,8 +254,18 @@ void SvgReader::get_path_commands(const std::vector<std::string> &tokens, Path &
        c.numbers = numbers;
        cmds.push_back(c);
      }
-    // split the commands into sub_paths
-    
+    // split the commands into sub_paths 
+    std::vector< std::vector< Command> > subpaths;
+    this->SplitSubpaths(cmds, subpaths);
+
+    this->ExpandCommands(subpaths, path );
+
+//    for (std::vector<Command> subpath : subpaths)
+//    {
+//      std::vector<Command> s;
+//      path.subpaths.push_back(s);
+//    }
+        
 }
 
 void SvgReader::get_path_attribs(TiXmlElement* pElement, Path &path)
@@ -344,16 +357,15 @@ void SvgReader::Dump_paths(const std::vector<Path> paths ) const
   for (Path path : paths)
   {
     std::cout << " -" << path.id << " " << path.style << std::endl;
-    for (std::vector<Command> subPath : path.subPaths)
+    for (std::vector<Command> subpath : path.subpaths)
     {
-      std::cout << "   subpath (" << subPath.size() << " cmds)" << std::endl;
-      for (Command cmd: subPath)
-  	  {
-	    std::cout << "    " << cmd.tostr() << std::endl;
-	  }
-   }
- }
-
+      std::cout << "   subpath (" << subpath.size() << " cmds)" << std::endl;
+      for (Command cmd: subpath)
+      {
+        std::cout << "    " << cmd.tostr() << std::endl;
+      }
+    }
+  }
 }
 
 // ----------------------------------------------------------------------
