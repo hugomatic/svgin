@@ -131,7 +131,16 @@ void SvgReader::SubpathToPolyline(const std::vector<Command> &subpath, std::vect
   {
     if (cmd.type == 'm' || cmd.type == 'l')
     {
-       todo
+       size_t i =0;
+       size_t count = cmd.numbers.size();
+       while(i < count)
+       {
+         Point p;
+         p.x = cmd.numbers[i+0];
+         p.y = cmd.numbers[i+1];
+         polyline.push_back(p);
+         i += 2;
+      }
     }
   }
 }
@@ -214,9 +223,9 @@ void SvgReader::ExpandCommands(const std::vector< std::vector<Command> > &subpat
         cmd.type = xCmd.type;
 	
      	for(size_t i=0; i < numberCount; i++)
-	    {
-	      cmd.numbers.push_back(xCmd.numbers[i+n]);
-	    }
+	{
+	  cmd.numbers.push_back(xCmd.numbers[i+n]);
+	}
         n += numberCount;
       } 
     }
@@ -280,7 +289,9 @@ void SvgReader::get_path_commands(const std::vector<std::string> &tokens, Path &
     {
         path.polylines.push_back(std::vector<Point>());
         std::vector<Point> &polyline = path.polylines.back();
+	std::cout << "XXX " << polyline.size() << std::endl;
         this->SubpathToPolyline(subpath, polyline);
+        std::cout << "X X X " << polyline.size() << std::endl;
     }
         
 }
@@ -378,11 +389,21 @@ void SvgReader::Dump_paths(const std::vector<Path> paths ) const
     for (std::vector<Command> subpath : path.subpaths)
     {
       std::cout << "//  subpath (" << subpath.size() << " cmds)" << std::endl;
-      for (Command cmd: subpath)
+      // for (Command cmd: subpath)
+      // {
+        // std::cout << "//    " << cmd.tostr() << std::endl;
+     // }
+    }
+    for (std::vector<Point> poly : path.polylines)
+    {
+      std::cout << "[" << std::endl;
+      char sep = ' ';
+      for( Point p : poly)
       {
-        std::cout << "//    " << cmd.tostr() << std::endl;
-        
+        std::cout << " " << sep << "[" <<  p.x << ", " << p.y << "]" <<std::endl;
+	sep = ',';
       }
+      std::cout << "], " << std::endl;
     }
   }
 }
