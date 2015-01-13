@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+
+<script type="text/javascript" src="svg.js" ></script>
+
+<body>
+
+<canvas id="myCanvas" width="1024" height="768"
+style="border:1px solid #d3d3d3;">
+Your browser does not support the canvas element.
+</canvas>
+
+<script>
+
+
+
+function drawPath(ctx, path, style, x0, y0, scale)
+{
+  console.log('drawPath ' + path.name);
+
+  for(var j=0; j <  path.subpaths.length; j++)
+  {
+
+    var points = path.subpaths[j];
+    if (points.length < 2)
+    {
+      console.log("not enough points in subpath " + j);
+      return;
+    }
+    ctx.moveTo( x0 + scale *  points[0][0], y0 + scale * points[0][1]);
+    for (var i=1; i < points.length; i++)
+    {
+      var x = x0 + scale * points[i][0];
+      var y = y0 + scale * points[i][1];
+      ctx.lineTo(x, y);
+    }
+    ctx.strokeStyle= style;
+    ctx.stroke();
+  }
+}
+
+var canvas = document.getElementById("myCanvas");
+var ctx = canvas.getContext("2d");
+
+var styles = ["red", "green", "blue"];
+
+
+var x0 = 0;
+var y0 = 0;
+var scale = 1;
+
+for (var i =0; i < svg.length; i++)
+{
+    var path = svg[i];
+    console.log("path: " + path.name);
+    
+    drawPath(ctx, path, styles[i%3], x0, y0, scale );
+}
+
+
+
+</script>
+
+</body>
+</html>
+
