@@ -38,11 +38,12 @@ struct Command
 
 struct Path
 {
-//   std::vector<Command> cmds;
    std::string id;
    std::string style;
 
    std::vector< std::vector<Command> > subpaths;   
+
+   std::vector< std::vector<Point> > polylines;
 };
 
 
@@ -63,6 +64,9 @@ class SvgReader
   private: void ExpandCommands(const std::vector< std::vector<Command> > &subpaths, Path &path);
   private: void SplitSubpaths(const std::vector<Command> cmds, std::vector< std::vector<Command> > &split_cmds);
   private: void PathToPoints(const Path &path, double resolution, std::vector< std::vector<Point> > &polys);
+
+  
+  private: void SubpathToPolyline(const std::vector<Command> &subpath, std::vector<Point> &polyline);
 
 };
 
@@ -89,6 +93,47 @@ std::vector<std::string> &split(const std::string &s, char delim, std::vector<st
         elems.push_back(item);
     }
     return elems;
+}
+
+Point bezierInterpolate(double t, const Point &p0, const Point &p1, const Point &p2, const Point &p3)
+{
+  double t_1 = 1.0 - t;
+  double t_1_2 = t_1 * t_1;
+  double t_1_3 = t_1_2 * t_1;
+  double t2 = t * t;
+  double t3 = t2 * t;
+  
+  Point p;  
+  p.x = t_1_3 * p0.x + 3 * t *  t_1_2 * p1.x + 3 * t2 * t_1 * p2.x + t3 * p3.x;
+  p.y = t_1_3 * p0.y + 3 * t *  t_1_2 * p1.y + 3 * t2 * t_1 * p2.y + t3 * p3.y;
+
+  return p;  
+}
+
+double Distance(const Point &p0, const Point &p1)
+{
+  double xx = (p0.x - p1.x) *  (p0.x - p1.x);
+  double yy = (p0.y - p1.y) *  (p0.y - p1.y);
+  return sqrt(xx + yy);
+}
+
+unsigned int GetStepCount(const Point &p0, const Point &p1, const Point &p2, const Point &p3, double res)
+{
+  double d = Distance(p0,p1) + Distance(p1,p2) + Distance(p2, p3);
+  double steps = res / d;
+  return (unsigned int) fabs(steps);
+}
+
+
+void SvgReader::SubpathToPolyline(const std::vector<Command> &subpath, std::vector<Point> &polyline)
+{
+  for (Command cmd: subpath)
+  {
+    if (cmd.type == 'm' || cmd.type == 'l')
+    {
+       todo
+    }
+  }
 }
 
 
@@ -127,35 +172,6 @@ void SvgReader::make_commands(char cmd, const std::vector<double> &numbers, std:
     cmds.push_back(c);
   }
 
-/*
-  if (tolower(cmd) == 'v' || tolower(cmd) == 'h')
-  {
-    unsigned int i = 0;
-    size_t size = numbers.size();
-    while (i < size)
-    {
-      Command c;
-      c.type = cmd;
-      c.data[0] = numbers[0];
-      c.data[1] = numbers[1];
-      cmds.push_back(c);
-      i += 1;
-    }
-    return;
-  }
-
-  if (tolower(cmd) == 'z')
-  {
-    Command c;
-    c.type = cmd;
-    cmds.push_back(c);
-    return;
-  }
-
-  std::string s = "Unknown cmd " + cmd;
-  SvgError x(s.c_str());
-  throw(x);
- */
 
 }
 
@@ -197,10 +213,10 @@ void SvgReader::ExpandCommands(const std::vector< std::vector<Command> > &subpat
         Command &cmd = subpath.back();
         cmd.type = xCmd.type;
 	
-	for(size_t i=0; i < numberCount; i++)
-	{
-	   cmd.numbers.push_back(xCmd.numbers[i+n]);
-	}
+     	for(size_t i=0; i < numberCount; i++)
+	    {
+	      cmd.numbers.push_back(xCmd.numbers[i+n]);
+	    }
         n += numberCount;
       } 
     }
@@ -260,11 +276,12 @@ void SvgReader::get_path_commands(const std::vector<std::string> &tokens, Path &
 
     this->ExpandCommands(subpaths, path );
 
-//    for (std::vector<Command> subpath : subpaths)
-//    {
-//      std::vector<Command> s;
-//      path.subpaths.push_back(s);
-//    }
+    for (std::vector<Command> subpath : subpaths)
+    {
+        path.polylines.push_back(std::vector<Point>());
+        std::vector<Point> &polyline = path.polylines.back();
+        this->SubpathToPolyline(subpath, polyline);
+    }
         
 }
 
@@ -353,16 +370,18 @@ void SvgReader::Parse(const char* pFilename, std::vector<Path> &paths)
 
 void SvgReader::Dump_paths(const std::vector<Path> paths ) const
 {
-  std::cout << "PATHS: " << std::endl;
+  std::cout << "var svg = [];" << std::endl;
   for (Path path : paths)
   {
-    std::cout << " -" << path.id << " " << path.style << std::endl;
+    std::cout << "svg.push({name:\"" << path.id <<  "\", subpaths:[], style: " << path.style << "}); " << std::endl;
+    // std::cout << " -" << path.id << " " << path.style << std::endl;
     for (std::vector<Command> subpath : path.subpaths)
     {
-      std::cout << "   subpath (" << subpath.size() << " cmds)" << std::endl;
+      std::cout << "//  subpath (" << subpath.size() << " cmds)" << std::endl;
       for (Command cmd: subpath)
       {
-        std::cout << "    " << cmd.tostr() << std::endl;
+        std::cout << "//    " << cmd.tostr() << std::endl;
+        
       }
     }
   }
