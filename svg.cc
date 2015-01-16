@@ -65,8 +65,7 @@ class SvgReader
   private: void SplitSubpaths(const std::vector<Command> cmds, std::vector< std::vector<Command> > &split_cmds);
   private: void PathToPoints(const Path &path, double resolution, std::vector< std::vector<Point> > &polys);
 
-  
-  private: void SubpathToPolyline(const std::vector<Command> &subpath, std::vector<Point> &polyline);
+  private: Point SubpathToPolyline(const std::vector<Command> &subpath, Point last, std::vector<Point> &polyline);
 
 };
 
@@ -125,7 +124,7 @@ unsigned int GetStepCount(const Point &p0, const Point &p1, const Point &p2, con
 }
 
 
-void SvgReader::SubpathToPolyline(const std::vector<Command> &subpath, std::vector<Point> &polyline)
+Point SvgReader::SubpathToPolyline(const std::vector<Command> &subpath, Point last,  std::vector<Point> &polyline)
 {
   for (Command cmd: subpath)
   {
@@ -138,11 +137,16 @@ void SvgReader::SubpathToPolyline(const std::vector<Command> &subpath, std::vect
          Point p;
          p.x = cmd.numbers[i+0];
          p.y = cmd.numbers[i+1];
+         // m and l cmds are relative to the last point
+         p.x += last.x;
+         p.y += last.y;
          polyline.push_back(p);
+         last = p; 
          i += 2;
       }
     }
   }
+  return last;
 }
 
 
@@ -223,9 +227,9 @@ void SvgReader::ExpandCommands(const std::vector< std::vector<Command> > &subpat
         cmd.type = xCmd.type;
 	
      	for(size_t i=0; i < numberCount; i++)
-	{
-	  cmd.numbers.push_back(xCmd.numbers[i+n]);
-	}
+	    {
+	      cmd.numbers.push_back(xCmd.numbers[i+n]);
+	    }
         n += numberCount;
       } 
     }
@@ -235,7 +239,6 @@ void SvgReader::ExpandCommands(const std::vector< std::vector<Command> > &subpat
 void SvgReader::get_path_commands(const std::vector<std::string> &tokens, Path &path)
 {
      std::vector <Command> cmds;
-     
      std::string lookup = "cCmMlLvVhHzZ";
      char lastCmd = 'x';
      std::vector<double> numbers;
@@ -285,12 +288,18 @@ void SvgReader::get_path_commands(const std::vector<std::string> &tokens, Path &
 
     this->ExpandCommands(subpaths, path );
 
+    // the starting point for the subpath
+    // it is the end point of the previous one
+    Point p;
+    p.x = 0;
+    p.y = 0;
     for (std::vector<Command> subpath : subpaths)
     {
         path.polylines.push_back(std::vector<Point>());
         std::vector<Point> &polyline = path.polylines.back();
-	std::cout << "XXX " << polyline.size() << std::endl;
-        this->SubpathToPolyline(subpath, polyline);
+        
+    	std::cout << "XXX " << polyline.size() << std::endl;
+        p = this->SubpathToPolyline(subpath, p, polyline);
         std::cout << "X X X " << polyline.size() << std::endl;
     }
         
@@ -384,27 +393,33 @@ void SvgReader::Dump_paths(const std::vector<Path> paths ) const
   std::cout << "var svg = [];" << std::endl;
   for (Path path : paths)
   {
-    std::cout << "svg.push({name:\"" << path.id <<  "\", subpaths:[], style: " << path.style << "}); " << std::endl;
+    std::cout << "svg.push({name:\"" << path.id <<  "\", subpaths:[], style: \"" << path.style << "\"}); " << std::endl;
     // std::cout << " -" << path.id << " " << path.style << std::endl;
-    for (std::vector<Command> subpath : path.subpaths)
-    {
-      std::cout << "//  subpath (" << subpath.size() << " cmds)" << std::endl;
+//    for (std::vector<Command> subpath : path.subpaths)
+//    {
+      // std::cout << "//  subpath (" << subpath.size() << " cmds)" << std::endl;
       // for (Command cmd: subpath)
       // {
         // std::cout << "//    " << cmd.tostr() << std::endl;
      // }
-    }
-    for (std::vector<Point> poly : path.polylines)
+//    }
+    std::cout << "svg[svg.length-1].subpaths = [";
+    char psep = ' ';
+    for (unsigned int i=0; i < path.polylines.size(); i++)
     {
-      std::cout << "[" << std::endl;
+      std::vector<Point> poly = path.polylines[i];
+      std::cout << psep <<  "[" << std::endl;
+      psep = ',';
       char sep = ' ';
       for( Point p : poly)
       {
-        std::cout << " " << sep << "[" <<  p.x << ", " << p.y << "]" <<std::endl;
-	sep = ',';
+        std::cout << " " << sep << " [" <<  p.x << ", " << p.y << "]" <<std::endl;
+	    sep = ',';
       }
-      std::cout << "], " << std::endl;
+      std::cout << " ] " << std::endl;
     }
+    std::cout << "];" << std::endl;
+    std::cout << "\n\n";
   }
 }
 
